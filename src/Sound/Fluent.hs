@@ -259,8 +259,10 @@ runFluent = do
   t <- atomically $ newTVar 0
   let fluent = Fluent c b g t
 
+  setup <- readFile "setupFluent.hs"
+  
   -- TODO preloadClipNamed
-  preloadBuffers kTESTCLIPS fluent
+  preloadBuffers (setupFileTextToClips setup) fluent
 
   str2 <- initAudio fluent
   
@@ -285,11 +287,19 @@ runFluent = do
   killAudio fluent str2
   putStrLn "Goodbye from fluent!"
 
-kTESTCLIPS = 
-  [ Clip "test" "test.wav" (Span (4410*95) (4410*100))
-  , Clip "foo" "test.wav" (Span (4410*20) (4410*100))
-  , Clip "bar" "test.wav" (Span (4410*30) (4410*100))
-  ]
+-- kTESTCLIPS = 
+--   [ Clip "test" "test.wav" (Span (4410*95) (4410*100))
+--   , Clip "foo" "test.wav" (Span (4410*20) (4410*100))
+--   , Clip "bar" "test.wav" (Span (4410*30) (4410*100))
+--   ]
+
+setupFileTextToClips :: String -> [Clip]
+setupFileTextToClips = setupFileDataToClips . read
+
+setupFileDataToClips :: [(String, String, (Double, Double))] -> [Clip]
+setupFileDataToClips = map toClip
+  where
+    toClip (n,f,(on,off)) = Clip (T.pack n) (T.pack f) (Span (floor $ on*44100) (floor $ off*44100))
   
 kVECSIZE = 4410
   
