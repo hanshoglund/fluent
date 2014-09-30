@@ -1,5 +1,6 @@
 
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Sound.Fluent where
 
@@ -16,6 +17,7 @@ import qualified Data.Vector.Storable as V
 
 import Control.Monad (foldM, foldM_, forM_)
 import Control.Concurrent.MVar
+import Data.IORef -- TODO
 import Control.Concurrent
 import Text.Printf
 
@@ -44,11 +46,25 @@ data Gen =
 
 -- All global state
 data Fluent = Fluent
+  (IORef (V.Vector Float)) -- TODO single global buffer
 
 -- Set up buffer arrays
 preloadBuffers :: [Clip] -> Fluent -> IO ()    
-preloadBuffers c f = do
-  -- TODO
+preloadBuffers c (Fluent globalBuffer) = do
+  -- TODO just an example
+  let inFile = "test.wav"
+  (info, Just (x :: VSF.Buffer Float)) <- SF.readFile inFile
+
+  putStrLn $ "sample rate: " ++ (show $ SF.samplerate info)
+  putStrLn $ "channels: "    ++ (show $ SF.channels info)
+  putStrLn $ "frames: "      ++ (show $ SF.frames info)
+  -- TODO assume 2 channels
+
+  let vecData = VSF.fromBuffer x
+  writeIORef globalBuffer vecData
+  -- fileData <- (newMVar vecData :: IO (MVar (V.Vector Float)))    
+
+  -- TODO what to do with vector?
   return ()
 
 -- Add generator
@@ -68,16 +84,19 @@ stopPlayingClip
 stopPlayingClip = undefined
 
 
-audioCallback :: PA.StreamCallback CFloat CFloat
-audioCallback _timing _flags frames inpPtr outPtr = do
+audioCallback :: Fluent -> PA.StreamCallback CFloat CFloat
+audioCallback (Fluent globalBuffer) _timing _flags frames inpPtr outPtr = do
   -- putStrLn $ show frames
   
   let channels = 2 -- TODO
 
   forM_ [0..channels-1] $ \c ->
-    forM_ [0..frames-1] $ \f ->
-      -- Grab the right chunk of some buffer
-      pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac f / realToFrac frames *0.1)
+    forM_ [0..frames-1] $ \f -> do
+      let v = 0
+      -- let v = (realToFrac f / realToFrac frames *0.1)
+      b <- readIORef globalBuffer
+      let v = (V.!) b (fromIntegral f)
+      pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v)
   
   -- TODO process audio
   return PA.Continue
@@ -91,8 +110,8 @@ initAudio fluent = do
     0 -- inputs
     2 -- outputs
     44100
-    (Just 64) -- TODO Nothing is more efficient
-    (Just audioCallback)
+    (Just (44100*5)) -- TODO Nothing is more efficient
+    (Just $ audioCallback fluent)
     (Just $ putStrLn "DSP done") -- when done
   str2 <- case str of
     Left _ -> fail "Could not open stream"
@@ -115,10 +134,12 @@ killAudio fluent str = do
 
 runFluent = do
   putStrLn "Welcome to fluent!"
-  preloadBuffers [] undefined
-  str2 <- initAudio undefined
-  threadDelay (1000000*3) -- TODO
-  killAudio undefined str2
+  b <- newIORef undefined -- TODO must be replaced by preloadBuffers
+  let fluent = Fluent b
+  preloadBuffers [] fluent
+  str2 <- initAudio fluent
+  threadDelay (1000000*10) -- TODO
+  killAudio fluent str2
   putStrLn "Goodbye from fluent!"
 {-
 Operation:
