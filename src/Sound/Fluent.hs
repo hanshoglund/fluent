@@ -111,19 +111,16 @@ haveClip clip fluent =
 
 -- Set up buffer arrays
 preloadBuffers :: [Clip] -> Fluent -> IO ()
-preloadBuffers c fluent = do
-  -- Really, load all the clips and add to table
-  let clip = kTESTCLIP
-  let inFile = T.unpack $ clipSourceFile clip
-  (info, Just (x :: VSF.Buffer Float)) <- SF.readFile inFile
-
-  -- putStrLn $ "sample rate: " ++ (show $ SF.samplerate info)
-  -- putStrLn $ "channels: "    ++ (show $ SF.channels info)
-  -- putStrLn $ "frames: "      ++ (show $ SF.frames info)
-  let vecData = VSF.fromBuffer x
-  atomically $ modifyTVar (_fluentClips fluent) (Map.insert "test" clip)
-  atomically $ modifyTVar (_fluentBuffers fluent) (Map.insert "test" vecData)
-  return ()
+preloadBuffers clips fluent =
+  forM_ clips $ \clip -> do
+    let inFile = T.unpack $ clipSourceFile clip
+    (info, Just (x :: VSF.Buffer Float)) <- SF.readFile inFile
+    -- putStrLn $ "sample rate: " ++ (show $ SF.samplerate info)
+    -- putStrLn $ "channels: "    ++ (show $ SF.channels info)
+    -- putStrLn $ "frames: "      ++ (show $ SF.frames info)
+    let vecData = VSF.fromBuffer x
+    atomically $ modifyTVar (_fluentClips fluent) (Map.insert "test" clip)
+    atomically $ modifyTVar (_fluentBuffers fluent) (Map.insert "test" vecData)
 
 -- Add generator
 startPlayingClip
@@ -233,8 +230,11 @@ runFluent = do
   t <- atomically $ newTVar 0
   let fluent = Fluent c b g t
 
-  preloadBuffers [] fluent
+  preloadBuffers [kTESTCLIP] fluent
   startPlayingClip (kTESTCLIP) "gen1" fluent
+  startPlayingClip (kTESTCLIP) "gen2" fluent
+  stopPlayingClip "gen1" fluent
+  stopPlayingClip "gen2" fluent
 
   str2 <- initAudio fluent
   
