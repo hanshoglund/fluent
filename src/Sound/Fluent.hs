@@ -264,7 +264,7 @@ statusHandler fluent m
   | "/fluent/status" `isPrefixOf` OSC.messageAddress m = putStrLn "Fluent is OK!"
   | otherwise = return ()
 startHandler fluent m
-  | "/fluent/start" `isPrefixOf` OSC.messageAddress m = startHandler' fluent m
+  | "/fluent/play" `isPrefixOf` OSC.messageAddress m = startHandler' fluent m
   | otherwise = return ()
 startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genId, OSC.ASCII_String clipId])
   = startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
