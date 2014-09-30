@@ -5,6 +5,7 @@
 
 module Sound.Fluent where
 
+import qualified Data.ByteString.Char8 as BS
 import qualified Sound.OSC           as OSC
 import qualified Sound.OSC.Transport.FD
 import Sound.OSC (OSC, Datum)
@@ -259,15 +260,28 @@ composeHandlers2 f g m = do
   f m
   g m
 
-statusHandler m
+statusHandler fluent m
   | "/fluent/status" `isPrefixOf` OSC.messageAddress m = putStrLn "Fluent is OK!"
   | otherwise = return ()
-startHandler m
-  | "/fluent/start" `isPrefixOf` OSC.messageAddress m = putStrLn "TODO"
+startHandler fluent m
+  | "/fluent/start" `isPrefixOf` OSC.messageAddress m = startHandler' fluent m
   | otherwise = return ()
-stopHandler m
+startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genId, OSC.ASCII_String clipId])
+  = startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
+startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genAndClipId])
+  = 
+    let (genId : clipId : _) = BS.words genAndClipId in
+    -- TODO crashes on bad msg
+    startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
+startHandler' fluent _ = putStrLn "Bad message"
+stopHandler fluent m
   | "/fluent/stop" `isPrefixOf` OSC.messageAddress m = putStrLn "TODO"
   | otherwise = return ()
+stopHandler' fluent  (OSC.Message _ [OSC.ASCII_String genId])
+  = stopPlayingClip (bs2t genId) fluent  >> return ()
+stopHandler' fluent _ = putStrLn "Bad message"
+
+bs2t = T.pack . BS.unpack
 
 runFluent = do
   putStrLn "Welcome to fluent!"
@@ -300,7 +314,7 @@ runFluent = do
   --   stopPlayingClip "gen2" fluent
   -- -- TODO DEBUG
   
-  waitForOsc $ composeHandlers [statusHandler, startHandler, stopHandler]
+  waitForOsc $ composeHandlers [statusHandler fluent, startHandler fluent, stopHandler fluent]
   
   killAudio fluent str2
   putStrLn "Goodbye from fluent!"
