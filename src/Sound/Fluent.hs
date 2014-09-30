@@ -92,8 +92,7 @@ startPlayingClip = undefined
 
 -- Remove generator
 stopPlayingClip
-  :: Clip   -- ^ clip to play
-  -> Text -- ^ id (for stop)
+  :: Text   -- ^ id (for stop)
   -> Fluent
   -> IO ()
 stopPlayingClip = undefined
