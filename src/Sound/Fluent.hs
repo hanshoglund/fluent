@@ -162,26 +162,31 @@ initAudio fluent = do
   threadDelay (1000000*1) -- TODO
   PA.startStream str2
   return str2
+
   where
+
     dspCallback :: Fluent -> PA.StreamCallback CFloat CFloat
-    dspCallback fluent _timing _flags frames inpPtr outPtr = do
+    dspCallback fluent __timing__ __flags__ frames __inpPtr__ outPtr = do
       -- TODO assume 2 channels
       let channels = 2
-      t <- atomically $ readTVar (_fluentTime fluent)
+      t       <- atomically $ readTVar (_fluentTime fluent)
+      buffers <- atomically $ readTVar (_fluentBuffers fluent)
       removeFinishedGens t fluent
-      forM_ [0..channels-1] $ \c ->
-        forM_ [0..frames-1] $ \f -> do
-          let v = 0
-          -- let v = (realToFrac f / realToFrac frames *0.1)
-          b <- fmap (unsafeLookup "test") $ atomically $ readTVar (_fluentBuffers fluent)
-          let v = (V.!) b (t + fromIntegral f)
-          pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v)
+
+      forM_ ["test"] $ \bufferName -> do
+        let b = Map.lookup bufferName buffers
+        case b of
+          Nothing -> return () -- TODO missing buffer, report somewhere
+          Just b -> do
+          forM_ [0..channels-1] $ \c ->
+            forM_ [0..frames-1] $ \f -> do
+              let v = 0
+              -- let v = (realToFrac f / realToFrac frames *0.1)
+              let v = (V.!) b (t + fromIntegral f)
+              pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v)
+
       atomically $ modifyTVar (_fluentTime fluent) (\t -> t + fromIntegral frames)
       return PA.Continue
-      where
-        unsafeLookup k m = case Map.lookup k m of
-          Nothing -> error "No such key"
-          Just x -> x    
 
 killAudio :: Fluent -> PA.Stream CFloat CFloat -> IO ()
 killAudio fluent str = do
