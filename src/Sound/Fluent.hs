@@ -119,6 +119,7 @@ preloadBuffers :: [Clip] -> Fluent -> IO ()
 preloadBuffers clips fluent =
   forM_ clips $ \clip -> do
     let inFile = T.unpack $ clipSourceFile clip
+    putStrLn $ "Preloading " ++ T.unpack (clipName clip) ++ "\t\t " ++ inFile ++ "..."
     (info, Just (x :: VSF.Buffer Float)) <- SF.readFile inFile
     -- putStrLn $ "sample rate: " ++ (show $ SF.samplerate info)
     -- putStrLn $ "channels: "    ++ (show $ SF.channels info)
@@ -153,7 +154,7 @@ startPlayingClipNamed clipId genId fluent = do
   clips <- atomically $ readTVar (_fluentClips fluent)
   case Map.lookup clipId clips of
     Nothing -> putStrLn $ "Can not start unknown clip: " ++ T.unpack clipId
-    Just c  -> startPlayingClip c genId fluent -- TODO double check
+    Just c  -> startPlayingClip c genId fluent -- TODO unnecessary double check
   return ()
 
 -- Remove generator
@@ -334,6 +335,7 @@ setupFileDataToClips = map toClip
     toClip (n,f,(on,off)) = Clip (T.pack n) (T.pack f) (Span (floor $ on*44100) (floor $ off*44100))
   
 kVECSIZE = 4410
+-- TODO infer duration from sound files
   
 {-
 Setup file:
