@@ -1,6 +1,7 @@
 
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE OverloadedStrings   #-}
 
 module Sound.Fluent where
 
@@ -20,12 +21,16 @@ import           Control.Concurrent.MVar
 import           Control.Concurrent.STM
 import           Control.Monad                    (foldM, foldM_, forM_)
 import           Text.Printf
+import qualified Data.Map.Strict as Map
+import           Data.Map.Strict (Map)
 
 import           Foreign.C.Types
 import           Foreign.ForeignPtr
 import           Foreign.Marshal.Alloc
 import           Foreign.Ptr
 import           Foreign.Storable
+import           Data.Text (Text)
+import qualified Data.Text as T
 
 import           System.Environment               (getArgs)
 
@@ -44,7 +49,8 @@ data Gen =
 
 -- All global state
 data Fluent = Fluent
-  (TVar (V.Vector Float)) -- TODO single global buffer
+  (TVar (Map Text (V.Vector Float)))
+  -- TODO single global buffer
 
 -- Set up buffer arrays
 preloadBuffers :: [Clip] -> Fluent -> IO ()
@@ -57,7 +63,7 @@ preloadBuffers c (Fluent globalBuffer) = do
   -- putStrLn $ "channels: "    ++ (show $ SF.channels info)
   -- putStrLn $ "frames: "      ++ (show $ SF.frames info)
   let vecData = VSF.fromBuffer x
-  atomically $ writeTVar globalBuffer vecData
+  atomically $ writeTVar globalBuffer (Map.singleton "test" vecData)
   return ()
 
 -- Add generator
@@ -106,11 +112,14 @@ initAudio fluent = do
         forM_ [0..frames-1] $ \f -> do
           let v = 0
           -- let v = (realToFrac f / realToFrac frames *0.1)
-          b <- atomically $ readTVar globalBuffer
+          b <- fmap (unsafeLookup "test") $ atomically $ readTVar globalBuffer
           let v = (V.!) b (fromIntegral f)
           pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v)
       return PA.Continue
-    
+      where
+        unsafeLookup k m = case Map.lookup k m of
+          Nothing -> error "No such key"
+          Just x -> x    
 
 killAudio :: Fluent -> PA.Stream CFloat CFloat -> IO ()
 killAudio fluent str = do
