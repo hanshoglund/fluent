@@ -17,7 +17,7 @@ import qualified Data.Vector.Storable as V
 
 import Control.Monad (foldM, foldM_, forM_)
 import Control.Concurrent.MVar
-import Data.IORef -- TODO
+import Control.Concurrent.STM
 import Control.Concurrent
 import Text.Printf
 
@@ -46,7 +46,7 @@ data Gen =
 
 -- All global state
 data Fluent = Fluent
-  (IORef (V.Vector Float)) -- TODO single global buffer
+  (TVar (V.Vector Float)) -- TODO single global buffer
 
 -- Set up buffer arrays
 preloadBuffers :: [Clip] -> Fluent -> IO ()    
@@ -61,7 +61,7 @@ preloadBuffers c (Fluent globalBuffer) = do
   -- TODO assume 2 channels
 
   let vecData = VSF.fromBuffer x
-  writeIORef globalBuffer vecData
+  atomically $ writeTVar globalBuffer vecData
   -- fileData <- (newMVar vecData :: IO (MVar (V.Vector Float)))    
 
   -- TODO what to do with vector?
@@ -94,7 +94,7 @@ audioCallback (Fluent globalBuffer) _timing _flags frames inpPtr outPtr = do
     forM_ [0..frames-1] $ \f -> do
       let v = 0
       -- let v = (realToFrac f / realToFrac frames *0.1)
-      b <- readIORef globalBuffer
+      b <- atomically $ readTVar globalBuffer
       let v = (V.!) b (fromIntegral f)
       pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v)
   
@@ -134,7 +134,7 @@ killAudio fluent str = do
 
 runFluent = do
   putStrLn "Welcome to fluent!"
-  b <- newIORef undefined -- TODO must be replaced by preloadBuffers
+  b <- atomically $ newTVar undefined -- TODO must be replaced by preloadBuffers
   let fluent = Fluent b
   preloadBuffers [] fluent
   str2 <- initAudio fluent
