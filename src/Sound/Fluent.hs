@@ -47,14 +47,18 @@ data Clip =
 data Gen =
   Gen ()
 
+-- Processed samples
+type Time = Int
+
 -- All global state
-data Fluent = Fluent
-  (TVar (Map Text (V.Vector Float)))
-  -- TODO single global buffer
+data Fluent = Fluent {
+  _fluentBuffers :: (TVar (Map Text (V.Vector Float))),
+  _fluentTime :: (TVar Time)
+  }
 
 -- Set up buffer arrays
 preloadBuffers :: [Clip] -> Fluent -> IO ()
-preloadBuffers c (Fluent globalBuffer) = do
+preloadBuffers c fluent = do
   -- TODO just an example
   let inFile = "test.wav"
   (info, Just (x :: VSF.Buffer Float)) <- SF.readFile inFile
@@ -63,7 +67,7 @@ preloadBuffers c (Fluent globalBuffer) = do
   -- putStrLn $ "channels: "    ++ (show $ SF.channels info)
   -- putStrLn $ "frames: "      ++ (show $ SF.frames info)
   let vecData = VSF.fromBuffer x
-  atomically $ writeTVar globalBuffer (Map.singleton "test" vecData)
+  atomically $ writeTVar (_fluentBuffers fluent) (Map.singleton "test" vecData)
   return ()
 
 -- Add generator
@@ -105,16 +109,17 @@ initAudio fluent = do
   return str2
   where
     dspCallback :: Fluent -> PA.StreamCallback CFloat CFloat
-    dspCallback (Fluent globalBuffer) _timing _flags frames inpPtr outPtr = do
+    dspCallback fluent _timing _flags frames inpPtr outPtr = do
       -- TODO assume 2 channels
       let channels = 2
       forM_ [0..channels-1] $ \c ->
         forM_ [0..frames-1] $ \f -> do
           let v = 0
           -- let v = (realToFrac f / realToFrac frames *0.1)
-          b <- fmap (unsafeLookup "test") $ atomically $ readTVar globalBuffer
+          b <- fmap (unsafeLookup "test") $ atomically $ readTVar (_fluentBuffers fluent)
           let v = (V.!) b (fromIntegral f)
           pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v)
+          atomically $ modifyTVar (_fluentTime fluent) (\t -> t + fromIntegral frames)
       return PA.Continue
       where
         unsafeLookup k m = case Map.lookup k m of
@@ -137,7 +142,8 @@ killAudio fluent str = do
 runFluent = do
   putStrLn "Welcome to fluent!"
   b <- atomically $ newTVar undefined -- TODO must be replaced by preloadBuffers
-  let fluent = Fluent b
+  t <- atomically $ newTVar 0
+  let fluent = Fluent b t
   preloadBuffers [] fluent
   str2 <- initAudio fluent
   threadDelay (1000000*10) -- TODO
