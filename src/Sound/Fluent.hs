@@ -242,14 +242,32 @@ waitForOsc handler = do
   let port = 54321
   putStrLn $ "Listening on port " ++ show 54321
   let t = OSC.udpServer "127.0.0.1" port
-  Sound.OSC.Transport.FD.withTransport t $ \t -> void $ OSC.untilPredicate id $ do
+  Sound.OSC.Transport.FD.withTransport t $ \t -> void $ OSC.untilPredicate not {-should be not-} $ do
     msgs <- Sound.OSC.Transport.FD.recvMessages t
     mapM_ handler msgs
     return $ any isQuitMessage msgs
   return ()
   where
-    isQuitMessage :: OSC.Message -> Bool
-    isQuitMessage m = not $ "/fluent/quit" `isPrefixOf` OSC.messageAddress m
+
+isQuitMessage :: OSC.Message -> Bool
+isQuitMessage m = "/fluent/quit" `isPrefixOf` OSC.messageAddress m
+               
+composeHandlers = foldr composeHandlers2 (\x -> return ())
+
+composeHandlers2 :: (OSC.Message -> IO ()) -> (OSC.Message -> IO ()) -> OSC.Message -> IO ()
+composeHandlers2 f g m = do
+  f m
+  g m
+
+statusHandler m
+  | "/fluent/status" `isPrefixOf` OSC.messageAddress m = putStrLn "Fluent is OK!"
+  | otherwise = return ()
+startHandler m
+  | "/fluent/start" `isPrefixOf` OSC.messageAddress m = putStrLn "TODO"
+  | otherwise = return ()
+stopHandler m
+  | "/fluent/stop" `isPrefixOf` OSC.messageAddress m = putStrLn "TODO"
+  | otherwise = return ()
 
 runFluent = do
   putStrLn "Welcome to fluent!"
@@ -266,23 +284,23 @@ runFluent = do
 
   str2 <- initAudio fluent
   
-  do
-    stopPlayingClip "nonexistant" fluent
-    -- threadDelay (1000*500) -- TODO
-    startPlayingClipNamed "test" "gen1" fluent
-    threadDelay (1000*2000) -- TODO
-    startPlayingClipNamed "test" "gen2" fluent
-    threadDelay (1000*2000) -- TODO
-    startPlayingClipNamed "foo" "gen3" fluent
-    threadDelay (1000*2000) -- TODO
-    startPlayingClipNamed "bar" "gen3" fluent
-    -- threadDelay (1000*6000) -- TODO
-    stopPlayingClip "gen1" fluent
-    -- threadDelay (1000*500) -- TODO
-    stopPlayingClip "gen2" fluent
-  -- TODO DEBUG
+  -- do
+  --   stopPlayingClip "nonexistant" fluent
+  --   -- threadDelay (1000*500) -- TODO
+  --   startPlayingClipNamed "test" "gen1" fluent
+  --   threadDelay (1000*2000) -- TODO
+  --   startPlayingClipNamed "test" "gen2" fluent
+  --   threadDelay (1000*2000) -- TODO
+  --   startPlayingClipNamed "foo" "gen3" fluent
+  --   threadDelay (1000*2000) -- TODO
+  --   startPlayingClipNamed "bar" "gen3" fluent
+  --   -- threadDelay (1000*6000) -- TODO
+  --   stopPlayingClip "gen1" fluent
+  --   -- threadDelay (1000*500) -- TODO
+  --   stopPlayingClip "gen2" fluent
+  -- -- TODO DEBUG
   
-  waitForOsc print
+  waitForOsc $ composeHandlers [statusHandler, startHandler, stopHandler]
   
   killAudio fluent str2
   putStrLn "Goodbye from fluent!"
