@@ -241,5 +241,6 @@ OSC protocol (currently ignores time):
   /fluent/play "note2 vln1"
   /fluent/stop "note1"
   /fluent/stop "note2"
+  /fluent/status
   /fluent/quit
 -}
