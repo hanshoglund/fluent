@@ -195,7 +195,7 @@ initAudio fluent = do
 
       buffers <- atomically $ readTVar (_fluentBuffers fluent)
       gens    <- atomically $ readTVar (_fluentGens fluent)
-      print gens
+      -- print gens
 
       -- Zero all channels
       forM_ [0..channels-1] $ \c ->
