@@ -5,6 +5,9 @@
 
 module Sound.Fluent where
 
+import qualified Sound.OSC           as OSC
+import qualified Sound.OSC.Transport.FD
+import Sound.OSC (OSC, Datum)
 import qualified Sound.PortAudio                  as PA
 import qualified Sound.PortAudio.Base             as PAB
 import qualified System.Random                    as R
@@ -17,6 +20,7 @@ import qualified Sound.File.Sndfile.Buffer.Vector as VSF
 
 
 import           Data.Monoid
+import           Control.Monad
 import           Control.Concurrent
 import           Control.Concurrent.MVar
 import           Control.Concurrent.STM
@@ -190,6 +194,16 @@ killAudio fluent str = do
     Nothing -> return ()
   return ()
 
+waitForOsc :: IO ()
+waitForOsc = do
+  let port = 54321
+  putStrLn $ "Listening on port " ++ show 54321
+  let t = OSC.udpServer "127.0.0.1" port
+  Sound.OSC.Transport.FD.withTransport t $ \t -> forever $ do
+    msgs <- Sound.OSC.Transport.FD.recvMessages t
+    mapM_ print msgs
+    return ()
+  return ()
 
 runFluent = do
   putStrLn "Welcome to fluent!"
@@ -201,10 +215,11 @@ runFluent = do
   preloadBuffers [] fluent
   str2 <- initAudio fluent
   
-  do
-    threadDelay (1000*1000*2) -- TODO
-    startPlayingClip (Clip "test" "test.wav" (Span 0 1000)) "gen1" fluent
-    threadDelay (1000*1000*8) -- TODO
+  -- do
+  --   threadDelay (1000*1000*2) -- TODO
+  --   startPlayingClip (Clip "test" "test.wav" (Span 0 1000)) "gen1" fluent
+  --   threadDelay (1000*1000*8) -- TODO
+  waitForOsc
   
   killAudio fluent str2
   putStrLn "Goodbye from fluent!"
@@ -215,7 +230,7 @@ Setup file:
     ...
   ]
 
-Osc protocol:
+OSC protocol (currently ignores time):
   /fluent/play "vln1" "note1"
   /fluent/play "vln1" "note2"
   /fluent/stop "note1"
