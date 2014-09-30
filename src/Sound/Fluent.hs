@@ -16,6 +16,7 @@ import qualified Sound.File.Sndfile.Buffer.Vector as VSF
 -- import Control.Lens
 
 
+import           Data.Monoid
 import           Control.Concurrent
 import           Control.Concurrent.MVar
 import           Control.Concurrent.STM
@@ -35,25 +36,36 @@ import qualified Data.Text as T
 import           System.Environment               (getArgs)
 
 -- Only use mono 44100 files for a start!
-data AudioFile =
-  AudioFile
-    FilePath
+{-
+  Before audio starts, we have a list of clips
+  During DSP we might get an instruction to stat playing a clip
+    This becomes a generator which can be stopped (and possibly changed)
+
+-}
+data Span = Span !Time !Time
+
 data Clip =
   Clip
-    AudioFile -- source
-    Int       -- start index
-    Int       -- num samples
-    Bool      -- loop?
+    !Text      -- unique clip id
+    !Text      -- source file
+    !Span      -- part of file
 data Gen =
-  Gen ()
+  Gen
+    !Text      -- unique gen id
+    !Clip      -- clip to play
+    !Time      -- time generator was created
 
 -- Processed samples
 type Time = Int
 
 -- All global state
 data Fluent = Fluent {
+  -- These don't need to be vars...
+  _fluentClips   :: (TVar (Map Text Clip)),
   _fluentBuffers :: (TVar (Map Text (V.Vector Float))),
-  _fluentTime :: (TVar Time)
+  
+  _fluentGens    :: (TVar (Map Text Gen)),
+  _fluentTime    :: (TVar Time)
   }
 
 -- Set up buffer arrays
@@ -73,7 +85,7 @@ preloadBuffers c fluent = do
 -- Add generator
 startPlayingClip
   :: Clip   -- ^ clip to play
-  -> String -- ^ id (for stop)
+  -> Text -- ^ id (for stop)
   -> Fluent
   -> IO ()
 startPlayingClip = undefined
@@ -81,7 +93,7 @@ startPlayingClip = undefined
 -- Remove generator
 stopPlayingClip
   :: Clip   -- ^ clip to play
-  -> String -- ^ id (for stop)
+  -> Text -- ^ id (for stop)
   -> Fluent
   -> IO ()
 stopPlayingClip = undefined
@@ -142,9 +154,11 @@ killAudio fluent str = do
 
 runFluent = do
   putStrLn "Welcome to fluent!"
-  b <- atomically $ newTVar undefined -- TODO must be replaced by preloadBuffers
+  c <- atomically $ newTVar mempty
+  b <- atomically $ newTVar mempty
+  g <- atomically $ newTVar mempty
   t <- atomically $ newTVar 0
-  let fluent = Fluent b t
+  let fluent = Fluent c b g t
   preloadBuffers [] fluent
   str2 <- initAudio fluent
   threadDelay (1000*1000*10) -- TODO
