@@ -193,6 +193,12 @@ initAudio fluent = do
       gens    <- atomically $ readTVar (_fluentGens fluent)
       print gens
 
+      -- Zero all channels
+      forM_ [0..channels-1] $ \c ->
+        forM_ [0..frames-1] $ \f -> do
+          pokeElemOff outPtr (fromIntegral $ f*channels+c) 0
+
+      -- Run all generators one by one
       forM_ ["test"] $ \bufferName -> do
         let b = Map.lookup bufferName buffers
         case b of
@@ -200,8 +206,13 @@ initAudio fluent = do
           Just b -> do
             forM_ [0..channels-1] $ \c ->
               forM_ [0..frames-1] $ \f -> do
-                let v = (V.!) b (t + fromIntegral f)
-                pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v)
+                -- Index to read: current time offset + current frame + offset in buffer
+                let preciseFrame = t + fromIntegral f
+                let v = (V.!) b preciseFrame
+                
+                -- Add v to index (so simultanous generators are summed)
+                oldV <- peekElemOff outPtr (fromIntegral $ f*channels+c)
+                pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v + oldV)
 
       atomically $ modifyTVar (_fluentTime fluent) (\t -> t + fromIntegral frames)
       return PA.Continue
