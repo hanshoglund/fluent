@@ -119,8 +119,8 @@ preloadBuffers clips fluent =
     -- putStrLn $ "channels: "    ++ (show $ SF.channels info)
     -- putStrLn $ "frames: "      ++ (show $ SF.frames info)
     let vecData = VSF.fromBuffer x
-    atomically $ modifyTVar (_fluentClips fluent) (Map.insert "test" clip)
-    atomically $ modifyTVar (_fluentBuffers fluent) (Map.insert "test" vecData)
+    atomically $ modifyTVar (_fluentClips fluent) (Map.insert (clipName clip) clip)
+    atomically $ modifyTVar (_fluentBuffers fluent) (Map.insert (clipName clip) vecData)
 
 -- Add generator
 startPlayingClip
@@ -200,8 +200,6 @@ initAudio fluent = do
           Just b -> do
             forM_ [0..channels-1] $ \c ->
               forM_ [0..frames-1] $ \f -> do
-                let v = 0
-                -- let v = (realToFrac f / realToFrac frames *0.1)
                 let v = (V.!) b (t + fromIntegral f)
                 pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v)
 
