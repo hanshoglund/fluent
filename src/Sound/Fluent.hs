@@ -138,6 +138,18 @@ startPlayingClip clip genId fluent = do
       atomically $ modifyTVar (_fluentGens fluent) (Map.insert genId gen)
       return ()
   return ()
+  
+startPlayingClipNamed
+  :: Text -- ^ clip to play
+  -> Text -- ^ id (for stop)
+  -> Fluent
+  -> IO ()
+startPlayingClipNamed clipId genId fluent = do
+  clips <- atomically $ readTVar (_fluentClips fluent)
+  case Map.lookup clipId clips of
+    Nothing -> putStrLn $ "Unknown clip: " ++ T.unpack clipId
+    Just c  -> startPlayingClip c genId fluent -- TODO double check
+  return ()
 
 -- Remove generator
 stopPlayingClip
@@ -230,11 +242,12 @@ runFluent = do
   t <- atomically $ newTVar 0
   let fluent = Fluent c b g t
 
+  -- TODO preloadClipNamed
   preloadBuffers [kTESTCLIP] fluent
-  startPlayingClip (kTESTCLIP) "gen1" fluent
-  startPlayingClip (kTESTCLIP) "gen2" fluent
-  stopPlayingClip "gen1" fluent
-  stopPlayingClip "gen2" fluent
+  startPlayingClipNamed "test" "gen1" fluent
+  startPlayingClipNamed "test" "gen2" fluent
+  -- stopPlayingClip "gen1" fluent
+  -- stopPlayingClip "gen2" fluent
 
   str2 <- initAudio fluent
   
