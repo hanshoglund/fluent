@@ -25,6 +25,7 @@ library
         stm,
         containers,
         text,
+        bytestring,
         
         -- lens            >= 4.4.0.2 && < 4.5,
         portaudio       >= 0.2.3 && < 1,
