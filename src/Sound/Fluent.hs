@@ -19,6 +19,7 @@ import qualified Sound.File.Sndfile.Buffer.Vector as VSF
 -- import Control.Lens
 
 
+import Data.List (isPrefixOf)
 import           Data.Monoid
 import           Control.Monad
 import           Control.Concurrent
@@ -199,11 +200,14 @@ waitForOsc = do
   let port = 54321
   putStrLn $ "Listening on port " ++ show 54321
   let t = OSC.udpServer "127.0.0.1" port
-  Sound.OSC.Transport.FD.withTransport t $ \t -> forever $ do
+  Sound.OSC.Transport.FD.withTransport t $ \t -> void $ OSC.untilPredicate id $ do
     msgs <- Sound.OSC.Transport.FD.recvMessages t
     mapM_ print msgs
-    return ()
+    return $ any isQuitMessage msgs
   return ()
+
+isQuitMessage :: OSC.Message -> Bool
+isQuitMessage m = OSC.messageAddress m `isPrefixOf` "/fluent/quit"
 
 runFluent = do
   putStrLn "Welcome to fluent!"
