@@ -43,17 +43,32 @@ import           System.Environment               (getArgs)
 
 -}
 data Span = Span !Time !Time
+  deriving (Eq, Ord, Show)
+inside t (Span a b) = a <= t && t < b
+onset (Span a b) = a
+offset (Span a b) = b
+duration s = offset s - onset s
+delay t (Span a b) = Span (t + a) (t + b)
+startAt t s = delay (t - onset s) s
 
 data Clip =
   Clip
     !Text      -- unique clip id
     !Text      -- source file
     !Span      -- part of file
+clipName (Clip n sf sp) = n
 data Gen =
   Gen
     !Text      -- unique gen id
     !Clip      -- clip to play
     !Time      -- time generator was created
+
+-- Span in which generator is alive
+genSpan :: Gen -> Span
+genSpan (Gen _ (Clip _ _ s) t) = startAt t s
+
+genIsAlive :: Time -> Gen -> Bool
+genIsAlive t s = t `inside` genSpan s
 
 -- Processed samples
 type Time = Int
@@ -68,10 +83,24 @@ data Fluent = Fluent {
   _fluentTime    :: (TVar Time)
   }
 
+
+removeFinishedGens :: Time -> Fluent -> IO ()
+removeFinishedGens t fluent =
+  atomically $ modifyTVar (_fluentGens fluent) (Map.filter (genIsAlive t))
+
+removeGenNamed :: Text -> Fluent -> IO ()
+removeGenNamed n fluent =
+  atomically $ modifyTVar (_fluentGens fluent) (Map.delete n)
+
+haveClip :: Clip -> Fluent -> IO Bool
+haveClip clip fluent =
+  atomically $ fmap (Map.member $ clipName clip) $ readTVar (_fluentClips fluent)
+
 -- Set up buffer arrays
 preloadBuffers :: [Clip] -> Fluent -> IO ()
 preloadBuffers c fluent = do
   -- TODO just an example
+  -- Really, load all the clips and add to table
   let inFile = "test.wav"
   (info, Just (x :: VSF.Buffer Float)) <- SF.readFile inFile
 
@@ -88,14 +117,23 @@ startPlayingClip
   -> Text -- ^ id (for stop)
   -> Fluent
   -> IO ()
-startPlayingClip = undefined
+startPlayingClip clip genId fluent = do
+  ok <- haveClip clip fluent
+  if not ok then
+    putStrLn $ "Unknown clip: " ++ T.unpack (clipName clip)
+    else do
+      time <- atomically $ readTVar (_fluentTime fluent)
+      let gen = Gen genId clip time
+      return ()
+  -- TODO add to table
+  return ()
 
 -- Remove generator
 stopPlayingClip
   :: Text   -- ^ id (for stop)
   -> Fluent
   -> IO ()
-stopPlayingClip = undefined
+stopPlayingClip = removeGenNamed
 
 
 initAudio :: Fluent -> IO (PA.Stream CFloat CFloat)
@@ -124,6 +162,7 @@ initAudio fluent = do
       -- TODO assume 2 channels
       let channels = 2
       t <- atomically $ readTVar (_fluentTime fluent)
+      removeFinishedGens t fluent
       forM_ [0..channels-1] $ \c ->
         forM_ [0..frames-1] $ \f -> do
           let v = 0
@@ -160,7 +199,12 @@ runFluent = do
   let fluent = Fluent c b g t
   preloadBuffers [] fluent
   str2 <- initAudio fluent
-  threadDelay (1000*1000*10) -- TODO
+  
+  do
+    threadDelay (1000*1000*2) -- TODO
+    startPlayingClip (Clip "test" "test.wav" (Span 0 1000)) "gen1" fluent
+    threadDelay (1000*1000*8) -- TODO
+  
   killAudio fluent str2
   putStrLn "Goodbye from fluent!"
 {-
