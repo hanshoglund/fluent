@@ -65,7 +65,7 @@ data Clip =
 
 clipName (Clip n sf sp) = n
 clipSourceFile (Clip n sf sp) = sf
-clipSourceSpan (Clip n sf sp) = sp
+clipSpan (Clip n sf sp) = sp
 
 data Gen =
   Gen
@@ -73,6 +73,10 @@ data Gen =
     !Clip      -- clip to play
     !Time      -- time generator was created
   deriving (Show)
+
+genName (Gen n cl started) = n
+genClip (Gen n cl started) = cl
+genStarted (Gen n cl started) = started
 
 -- Span in which generator is alive
 genSpan :: Gen -> Span
@@ -147,7 +151,7 @@ startPlayingClipNamed
 startPlayingClipNamed clipId genId fluent = do
   clips <- atomically $ readTVar (_fluentClips fluent)
   case Map.lookup clipId clips of
-    Nothing -> putStrLn $ "Unknown clip: " ++ T.unpack clipId
+    Nothing -> putStrLn $ "Can not start unknown clip: " ++ T.unpack clipId
     Just c  -> startPlayingClip c genId fluent -- TODO double check
   return ()
 
@@ -187,7 +191,6 @@ initAudio fluent = do
       -- TODO assume 2 channels
       let channels = 2
       t       <- atomically $ readTVar (_fluentTime fluent)
-      removeFinishedGens t fluent
 
       buffers <- atomically $ readTVar (_fluentBuffers fluent)
       gens    <- atomically $ readTVar (_fluentGens fluent)
@@ -199,7 +202,9 @@ initAudio fluent = do
           pokeElemOff outPtr (fromIntegral $ f*channels+c) 0
 
       -- Run all generators one by one
-      forM_ ["test"] $ \bufferName -> do
+      forM_ (fmap snd $ Map.toList gens) $ \gen -> do
+        let clip = genClip gen
+        let bufferName = clipName clip
         let b = Map.lookup bufferName buffers
         case b of
           Nothing -> return () -- TODO missing buffer, report somewhere
@@ -207,14 +212,17 @@ initAudio fluent = do
             forM_ [0..channels-1] $ \c ->
               forM_ [0..frames-1] $ \f -> do
                 -- Index to read: current time offset + current frame + offset in buffer
-                let preciseFrame = t + fromIntegral f
-                let v = (V.!) b preciseFrame
+                let preciseGlobalTime = t + fromIntegral f
+                -- If we started later, read an earlier position in the buffer
+                let preciseLocalTime = preciseGlobalTime - genStarted gen
+                let v = (V.!) b (preciseLocalTime + onset (clipSpan clip))
                 
                 -- Add v to index (so simultanous generators are summed)
                 oldV <- peekElemOff outPtr (fromIntegral $ f*channels+c)
                 pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v + oldV)
 
       atomically $ modifyTVar (_fluentTime fluent) (\t -> t + fromIntegral frames)
+      removeFinishedGens t fluent
       return PA.Continue
 
 killAudio :: Fluent -> PA.Stream CFloat CFloat -> IO ()
@@ -252,18 +260,23 @@ runFluent = do
   let fluent = Fluent c b g t
 
   -- TODO preloadClipNamed
-  preloadBuffers [kTESTCLIP] fluent
+  preloadBuffers kTESTCLIPS fluent
 
   str2 <- initAudio fluent
   
   do
-    threadDelay (1000*500) -- TODO
+    stopPlayingClip "nonexistant" fluent
+    -- threadDelay (1000*500) -- TODO
     startPlayingClipNamed "test" "gen1" fluent
-    threadDelay (1000*500) -- TODO
+    threadDelay (1000*2000) -- TODO
     startPlayingClipNamed "test" "gen2" fluent
-    threadDelay (1000*500) -- TODO
+    threadDelay (1000*2000) -- TODO
+    startPlayingClipNamed "foo" "gen3" fluent
+    threadDelay (1000*2000) -- TODO
+    startPlayingClipNamed "bar" "gen3" fluent
+    -- threadDelay (1000*6000) -- TODO
     stopPlayingClip "gen1" fluent
-    threadDelay (1000*500) -- TODO
+    -- threadDelay (1000*500) -- TODO
     stopPlayingClip "gen2" fluent
   -- TODO DEBUG
   
@@ -272,7 +285,12 @@ runFluent = do
   killAudio fluent str2
   putStrLn "Goodbye from fluent!"
 
-kTESTCLIP = Clip "test" "test.wav" (Span 0 44100)
+kTESTCLIPS = 
+  [ Clip "test" "test.wav" (Span (4410*95) (4410*100))
+  , Clip "foo" "test.wav" (Span (4410*20) (4410*100))
+  , Clip "bar" "test.wav" (Span (4410*30) (4410*100))
+  ]
+  
 kVECSIZE = 4410
   
 {-
