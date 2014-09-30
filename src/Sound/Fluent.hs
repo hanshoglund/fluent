@@ -119,7 +119,7 @@ preloadBuffers :: [Clip] -> Fluent -> IO ()
 preloadBuffers clips fluent =
   forM_ clips $ \clip -> do
     let inFile = T.unpack $ clipSourceFile clip
-    putStrLn $ "Preloading " ++ T.unpack (clipName clip) ++ "\t\t " ++ inFile ++ "..."
+    putStrLn $ "Loading clip " ++ T.unpack (clipName clip) ++ "\t\t " ++ inFile ++ "..."
     (info, Just (x :: VSF.Buffer Float)) <- SF.readFile inFile
     -- putStrLn $ "sample rate: " ++ (show $ SF.samplerate info)
     -- putStrLn $ "channels: "    ++ (show $ SF.channels info)
@@ -137,7 +137,7 @@ startPlayingClip
 startPlayingClip clip genId fluent = do
   ok <- haveClip clip fluent
   if not ok then
-    putStrLn $ "Unknown clip: " ++ T.unpack (clipName clip)
+    putStrLn $ "Error: Unknown clip: " ++ T.unpack (clipName clip)
     else do
       time <- atomically $ readTVar (_fluentTime fluent)
       let gen = Gen genId clip time
@@ -153,7 +153,7 @@ startPlayingClipNamed
 startPlayingClipNamed clipId genId fluent = do
   clips <- atomically $ readTVar (_fluentClips fluent)
   case Map.lookup clipId clips of
-    Nothing -> putStrLn $ "Can not start unknown clip: " ++ T.unpack clipId
+    Nothing -> putStrLn $ "Error: Unknown clip: " ++ T.unpack clipId
     Just c  -> startPlayingClip c genId fluent -- TODO unnecessary double check
   return ()
 
@@ -175,10 +175,10 @@ initAudio fluent = do
   str <- PA.openDefaultStream
     0 -- inputs
     2 -- outputs
-    44100
+    kSAMPLE_RATE
     (Just (kVECSIZE)) -- TODO 'Nothing' is more efficient
     (Just $ dspCallback fluent)
-    (Just $ putStrLn "DSP done") -- when done
+    (Just $ putStrLn "Audio thread finished alright") -- when done
   str2 <- case str of
     Left _ -> fail "Could not open stream"
     Right s -> return s
@@ -242,7 +242,7 @@ killAudio fluent str = do
 waitForOsc :: (OSC.Message -> IO ()) -> IO ()
 waitForOsc handler = do
   let port = 54321
-  putStrLn $ "Listening on port " ++ show 54321
+  putStrLn $ "Listening for OSC messages on port " ++ show 54321
   let t = OSC.udpServer "127.0.0.1" port
   Sound.OSC.Transport.FD.withTransport t $ \t -> void $ OSC.untilPredicate not {-should be not-} $ do
     msgs <- Sound.OSC.Transport.FD.recvMessages t
@@ -262,7 +262,7 @@ composeHandlers2 f g m = do
   g m
 
 statusHandler fluent m
-  | "/fluent/status" `isPrefixOf` OSC.messageAddress m = putStrLn "Fluent is OK!"
+  | "/fluent/status" `isPrefixOf` OSC.messageAddress m = putStrLn "Fluent is alright"
   | otherwise = return ()
 startHandler fluent m
   | "/fluent/play" `isPrefixOf` OSC.messageAddress m = startHandler' fluent m
@@ -274,18 +274,18 @@ startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genAndClipId])
     let (genId : clipId : _) = BS.words genAndClipId in
     -- TODO crashes on bad msg
     startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
-startHandler' fluent _ = putStrLn "Bad message"
+startHandler' fluent _ = putStrLn "Error: Bad message"
 stopHandler fluent m
   | "/fluent/stop" `isPrefixOf` OSC.messageAddress m = stopHandler' fluent m
   | otherwise = return ()
 stopHandler' fluent  (OSC.Message _ [OSC.ASCII_String genId])
   = stopPlayingClip (bs2t genId) fluent  >> return ()
-stopHandler' fluent _ = putStrLn "Bad message"
+stopHandler' fluent _ = putStrLn "Error: Bad message"
 
 bs2t = T.pack . BS.unpack
 
 runFluent = do
-  putStrLn "Welcome to fluent!"
+  putStrLn "Fluent says hello!"
   c <- atomically $ newTVar mempty
   b <- atomically $ newTVar mempty
   g <- atomically $ newTVar mempty
@@ -318,7 +318,7 @@ runFluent = do
   waitForOsc $ composeHandlers [statusHandler fluent, startHandler fluent, stopHandler fluent]
   
   killAudio fluent str2
-  putStrLn "Goodbye from fluent!"
+  putStrLn "Fluent says goodbye!"
 
 -- kTESTCLIPS = 
 --   [ Clip "test" "test.wav" (Span (4410*95) (4410*100))
@@ -332,8 +332,9 @@ setupFileTextToClips = setupFileDataToClips . read
 setupFileDataToClips :: [(String, String, (Double, Double))] -> [Clip]
 setupFileDataToClips = map toClip
   where
-    toClip (n,f,(on,off)) = Clip (T.pack n) (T.pack f) (Span (floor $ on*44100) (floor $ off*44100))
-  
+    toClip (n,f,(on,off)) = Clip (T.pack n) (T.pack f) (Span (floor $ on*kSAMPLE_RATE) (floor $ off*kSAMPLE_RATE))
+
+kSAMPLE_RATE = 44100  
 kVECSIZE = 128
 -- TODO infer duration from sound files
   
