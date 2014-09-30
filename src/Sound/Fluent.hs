@@ -211,6 +211,7 @@ initAudio fluent = do
         case b of
           Nothing -> return () -- TODO missing buffer, report somewhere
           Just b -> do
+            -- TODO optimize (move things up...)
             forM_ [0..channels-1] $ \c ->
               forM_ [0..frames-1] $ \f -> do
                 -- Index to read: current time offset + current frame + offset in buffer
@@ -294,37 +295,14 @@ runFluent = do
 
   setup <- readFile "setupFluent.hs"
   
-  -- TODO preloadClipNamed
   preloadBuffers (setupFileTextToClips setup) fluent
 
   str2 <- initAudio fluent
-  
-  -- do
-  --   stopPlayingClip "nonexistant" fluent
-  --   -- threadDelay (1000*500) -- TODO
-  --   startPlayingClipNamed "test" "gen1" fluent
-  --   threadDelay (1000*2000) -- TODO
-  --   startPlayingClipNamed "test" "gen2" fluent
-  --   threadDelay (1000*2000) -- TODO
-  --   startPlayingClipNamed "foo" "gen3" fluent
-  --   threadDelay (1000*2000) -- TODO
-  --   startPlayingClipNamed "bar" "gen3" fluent
-  --   -- threadDelay (1000*6000) -- TODO
-  --   stopPlayingClip "gen1" fluent
-  --   -- threadDelay (1000*500) -- TODO
-  --   stopPlayingClip "gen2" fluent
-  -- -- TODO DEBUG
-  
   waitForOsc $ composeHandlers [statusHandler fluent, startHandler fluent, stopHandler fluent]
-  
   killAudio fluent str2
+
   putStrLn "Fluent says goodbye!"
 
--- kTESTCLIPS = 
---   [ Clip "test" "test.wav" (Span (4410*95) (4410*100))
---   , Clip "foo" "test.wav" (Span (4410*20) (4410*100))
---   , Clip "bar" "test.wav" (Span (4410*30) (4410*100))
---   ]
 
 setupFileTextToClips :: String -> [Clip]
 setupFileTextToClips = setupFileDataToClips . read
