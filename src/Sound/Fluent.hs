@@ -231,8 +231,11 @@ Setup file:
   ]
 
 OSC protocol (currently ignores time):
-  /fluent/play "vln1" "note1"
-  /fluent/play "vln1" "note2"
+  /fluent/play "note1" "vln1"
+  /fluent/play "note2" "vln1"
+  /fluent/play "note1 vln1" -- equivalent to the above
+  /fluent/play "note2 vln1"
   /fluent/stop "note1"
   /fluent/stop "note2"
+  /fluent/quit
 -}
