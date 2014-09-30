@@ -207,7 +207,7 @@ waitForOsc handler = do
   return ()
   where
     isQuitMessage :: OSC.Message -> Bool
-    isQuitMessage m = OSC.messageAddress m `isPrefixOf` "/fluent/quit"
+    isQuitMessage m = not $ "/fluent/quit" `isPrefixOf` OSC.messageAddress m
 
 runFluent = do
   putStrLn "Welcome to fluent!"
