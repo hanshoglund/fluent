@@ -195,19 +195,19 @@ killAudio fluent str = do
     Nothing -> return ()
   return ()
 
-waitForOsc :: IO ()
-waitForOsc = do
+waitForOsc :: (OSC.Message -> IO ()) -> IO ()
+waitForOsc handler = do
   let port = 54321
   putStrLn $ "Listening on port " ++ show 54321
   let t = OSC.udpServer "127.0.0.1" port
   Sound.OSC.Transport.FD.withTransport t $ \t -> void $ OSC.untilPredicate id $ do
     msgs <- Sound.OSC.Transport.FD.recvMessages t
-    mapM_ print msgs
+    mapM_ handler msgs
     return $ any isQuitMessage msgs
   return ()
-
-isQuitMessage :: OSC.Message -> Bool
-isQuitMessage m = OSC.messageAddress m `isPrefixOf` "/fluent/quit"
+  where
+    isQuitMessage :: OSC.Message -> Bool
+    isQuitMessage m = OSC.messageAddress m `isPrefixOf` "/fluent/quit"
 
 runFluent = do
   putStrLn "Welcome to fluent!"
@@ -223,7 +223,7 @@ runFluent = do
   --   threadDelay (1000*1000*2) -- TODO
   --   startPlayingClip (Clip "test" "test.wav" (Span 0 1000)) "gen1" fluent
   --   threadDelay (1000*1000*8) -- TODO
-  waitForOsc
+  waitForOsc print
   
   killAudio fluent str2
   putStrLn "Goodbye from fluent!"
