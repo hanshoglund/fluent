@@ -98,7 +98,7 @@ initAudio fluent = do
     0 -- inputs
     2 -- outputs
     44100
-    (Just (44100*5)) -- TODO 'Nothing' is more efficient
+    (Just (1024)) -- TODO 'Nothing' is more efficient
     (Just $ dspCallback fluent)
     (Just $ putStrLn "DSP done") -- when done
   str2 <- case str of
@@ -112,14 +112,15 @@ initAudio fluent = do
     dspCallback fluent _timing _flags frames inpPtr outPtr = do
       -- TODO assume 2 channels
       let channels = 2
+      t <- atomically $ readTVar (_fluentTime fluent)
       forM_ [0..channels-1] $ \c ->
         forM_ [0..frames-1] $ \f -> do
           let v = 0
           -- let v = (realToFrac f / realToFrac frames *0.1)
           b <- fmap (unsafeLookup "test") $ atomically $ readTVar (_fluentBuffers fluent)
-          let v = (V.!) b (fromIntegral f)
+          let v = (V.!) b (t + fromIntegral f)
           pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v)
-          atomically $ modifyTVar (_fluentTime fluent) (\t -> t + fromIntegral frames)
+      atomically $ modifyTVar (_fluentTime fluent) (\t -> t + fromIntegral frames)
       return PA.Continue
       where
         unsafeLookup k m = case Map.lookup k m of
@@ -146,7 +147,7 @@ runFluent = do
   let fluent = Fluent b t
   preloadBuffers [] fluent
   str2 <- initAudio fluent
-  threadDelay (1000000*10) -- TODO
+  threadDelay (1000*1000*10) -- TODO
   killAudio fluent str2
   putStrLn "Goodbye from fluent!"
 {-
