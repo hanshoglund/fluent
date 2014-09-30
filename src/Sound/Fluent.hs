@@ -221,8 +221,10 @@ runFluent = do
   
   -- do
   --   threadDelay (1000*1000*2) -- TODO
-  --   startPlayingClip (Clip "test" "test.wav" (Span 0 1000)) "gen1" fluent
   --   threadDelay (1000*1000*8) -- TODO
+  -- DEBUG
+  startPlayingClip (Clip "test" "test.wav" (Span 0 44100)) "gen1" fluent
+  
   waitForOsc print
   
   killAudio fluent str2
