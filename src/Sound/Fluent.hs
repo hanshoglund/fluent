@@ -88,7 +88,7 @@ initAudio fluent = do
     0 -- inputs
     2 -- outputs
     44100
-    (Just (44100*5)) -- TODO Nothing is more efficient
+    (Just (44100*5)) -- TODO 'Nothing' is more efficient
     (Just $ dspCallback fluent)
     (Just $ putStrLn "DSP done") -- when done
   str2 <- case str of
