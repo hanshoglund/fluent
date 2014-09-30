@@ -61,12 +61,18 @@ data Clip =
     !Text      -- unique clip id
     !Text      -- source file
     !Span      -- part of file
+  deriving (Show)
+
 clipName (Clip n sf sp) = n
+clipSourceFile (Clip n sf sp) = sf
+clipSourceSpan (Clip n sf sp) = sp
+
 data Gen =
   Gen
     !Text      -- unique gen id
     !Clip      -- clip to play
     !Time      -- time generator was created
+  deriving (Show)
 
 -- Span in which generator is alive
 genSpan :: Gen -> Span
@@ -102,19 +108,21 @@ haveClip :: Clip -> Fluent -> IO Bool
 haveClip clip fluent =
   atomically $ fmap (Map.member $ clipName clip) $ readTVar (_fluentClips fluent)
 
+
 -- Set up buffer arrays
 preloadBuffers :: [Clip] -> Fluent -> IO ()
 preloadBuffers c fluent = do
-  -- TODO just an example
   -- Really, load all the clips and add to table
-  let inFile = "test.wav"
+  let clip = kTESTCLIP
+  let inFile = T.unpack $ clipSourceFile clip
   (info, Just (x :: VSF.Buffer Float)) <- SF.readFile inFile
 
   -- putStrLn $ "sample rate: " ++ (show $ SF.samplerate info)
   -- putStrLn $ "channels: "    ++ (show $ SF.channels info)
   -- putStrLn $ "frames: "      ++ (show $ SF.frames info)
   let vecData = VSF.fromBuffer x
-  atomically $ writeTVar (_fluentBuffers fluent) (Map.singleton "test" vecData)
+  atomically $ modifyTVar (_fluentClips fluent) (Map.insert "test" clip)
+  atomically $ modifyTVar (_fluentBuffers fluent) (Map.insert "test" vecData)
   return ()
 
 -- Add generator
@@ -130,8 +138,8 @@ startPlayingClip clip genId fluent = do
     else do
       time <- atomically $ readTVar (_fluentTime fluent)
       let gen = Gen genId clip time
+      atomically $ modifyTVar (_fluentGens fluent) (Map.insert genId gen)
       return ()
-  -- TODO add to table
   return ()
 
 -- Remove generator
@@ -153,7 +161,7 @@ initAudio fluent = do
     0 -- inputs
     2 -- outputs
     44100
-    (Just (1024)) -- TODO 'Nothing' is more efficient
+    (Just (kVECSIZE)) -- TODO 'Nothing' is more efficient
     (Just $ dspCallback fluent)
     (Just $ putStrLn "DSP done") -- when done
   str2 <- case str of
@@ -170,8 +178,11 @@ initAudio fluent = do
       -- TODO assume 2 channels
       let channels = 2
       t       <- atomically $ readTVar (_fluentTime fluent)
-      buffers <- atomically $ readTVar (_fluentBuffers fluent)
       removeFinishedGens t fluent
+
+      buffers <- atomically $ readTVar (_fluentBuffers fluent)
+      gens    <- atomically $ readTVar (_fluentGens fluent)
+      print gens
 
       forM_ ["test"] $ \bufferName -> do
         let b = Map.lookup bufferName buffers
@@ -221,19 +232,25 @@ runFluent = do
   g <- atomically $ newTVar mempty
   t <- atomically $ newTVar 0
   let fluent = Fluent c b g t
+
   preloadBuffers [] fluent
+  startPlayingClip (kTESTCLIP) "gen1" fluent
+
   str2 <- initAudio fluent
   
   -- do
   --   threadDelay (1000*1000*2) -- TODO
   --   threadDelay (1000*1000*8) -- TODO
   -- DEBUG
-  startPlayingClip (Clip "test" "test.wav" (Span 0 44100)) "gen1" fluent
   
   waitForOsc print
   
   killAudio fluent str2
   putStrLn "Goodbye from fluent!"
+
+kTESTCLIP = Clip "test" "test.wav" (Span 0 44100)
+kVECSIZE = 4410
+  
 {-
 Setup file:
   [
