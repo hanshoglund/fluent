@@ -76,9 +76,10 @@ type Time = Int
 -- All global state
 data Fluent = Fluent {
   -- These don't need to be vars...
+  -- preloadBuffers only access clips and buffers
+  -- DSP thread access buffers, gens and time
   _fluentClips   :: (TVar (Map Text Clip)),
   _fluentBuffers :: (TVar (Map Text (V.Vector Float))),
-  
   _fluentGens    :: (TVar (Map Text Gen)),
   _fluentTime    :: (TVar Time)
   }
@@ -208,16 +209,15 @@ runFluent = do
   killAudio fluent str2
   putStrLn "Goodbye from fluent!"
 {-
-Operation:
-  Start up
-  Preload buffers according to some spec
-  Begin waiting for OSC
-    When OSC received
-    Create generator
-    Each generator is a (Time -> State -> (Ampl, State)) function where
-      Time is relative to the creation of the generator
-      State is the state of all buffers in the system
-    In the audio thread, each bloc:
-      Read MVar containing compiled generators (actual time, their creation time)
-      Read MVar containing buffers
+Setup file:
+  [
+    ("vln1", "/audio/violins/i.wav", (0, 100)),
+    ...
+  ]
+
+Osc protocol:
+  /fluent/play "vln1" "note1"
+  /fluent/play "vln1" "note2"
+  /fluent/stop "note1"
+  /fluent/stop "note2"
 -}
