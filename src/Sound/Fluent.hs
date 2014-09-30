@@ -244,17 +244,19 @@ runFluent = do
 
   -- TODO preloadClipNamed
   preloadBuffers [kTESTCLIP] fluent
-  startPlayingClipNamed "test" "gen1" fluent
-  startPlayingClipNamed "test" "gen2" fluent
-  -- stopPlayingClip "gen1" fluent
-  -- stopPlayingClip "gen2" fluent
 
   str2 <- initAudio fluent
   
-  -- do
-  --   threadDelay (1000*1000*2) -- TODO
-  --   threadDelay (1000*1000*8) -- TODO
-  -- DEBUG
+  do
+    threadDelay (1000*500) -- TODO
+    startPlayingClipNamed "test" "gen1" fluent
+    threadDelay (1000*500) -- TODO
+    startPlayingClipNamed "test" "gen2" fluent
+    threadDelay (1000*500) -- TODO
+    stopPlayingClip "gen1" fluent
+    threadDelay (1000*500) -- TODO
+    stopPlayingClip "gen2" fluent
+  -- TODO DEBUG
   
   waitForOsc print
   
