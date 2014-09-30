@@ -276,7 +276,7 @@ startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genAndClipId])
     startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
 startHandler' fluent _ = putStrLn "Bad message"
 stopHandler fluent m
-  | "/fluent/stop" `isPrefixOf` OSC.messageAddress m = putStrLn "TODO"
+  | "/fluent/stop" `isPrefixOf` OSC.messageAddress m = stopHandler' fluent m
   | otherwise = return ()
 stopHandler' fluent  (OSC.Message _ [OSC.ASCII_String genId])
   = stopPlayingClip (bs2t genId) fluent  >> return ()
@@ -334,7 +334,7 @@ setupFileDataToClips = map toClip
   where
     toClip (n,f,(on,off)) = Clip (T.pack n) (T.pack f) (Span (floor $ on*44100) (floor $ off*44100))
   
-kVECSIZE = 4410
+kVECSIZE = 128
 -- TODO infer duration from sound files
   
 {-
