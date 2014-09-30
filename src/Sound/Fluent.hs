@@ -178,12 +178,12 @@ initAudio fluent = do
         case b of
           Nothing -> return () -- TODO missing buffer, report somewhere
           Just b -> do
-          forM_ [0..channels-1] $ \c ->
-            forM_ [0..frames-1] $ \f -> do
-              let v = 0
-              -- let v = (realToFrac f / realToFrac frames *0.1)
-              let v = (V.!) b (t + fromIntegral f)
-              pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v)
+            forM_ [0..channels-1] $ \c ->
+              forM_ [0..frames-1] $ \f -> do
+                let v = 0
+                -- let v = (realToFrac f / realToFrac frames *0.1)
+                let v = (V.!) b (t + fromIntegral f)
+                pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v)
 
       atomically $ modifyTVar (_fluentTime fluent) (\t -> t + fromIntegral frames)
       return PA.Continue
