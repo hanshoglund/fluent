@@ -5,6 +5,7 @@
 
 module Sound.Fluent where
 
+import Data.ByteString.Char8 (ByteString(..))
 import qualified Data.ByteString.Char8 as BS
 import qualified Sound.OSC           as OSC
 import qualified Sound.OSC.Transport.FD
@@ -48,13 +49,36 @@ import           System.Environment               (getArgs)
     This becomes a generator which can be stopped (and possibly changed)
 
 -}
+
+-- | Measure time in number of processed sample for speed and precision.
+type Time = Int
+
+timeToSeconds :: Time -> Double
+timeToSeconds x = fromIntegral x / kSAMPLE_RATE
+
+secondsToTime :: Double -> Time
+secondsToTime x = floor (x * kSAMPLE_RATE)
+
+-- | 
 data Span = Span !Time !Time
   deriving (Eq, Ord, Show)
+
+inside :: Time -> Span -> Bool
 inside t (Span a b) = a <= t && t < b
+
+onset :: Span -> Time
 onset (Span a b) = a
+
+offset :: Span -> Time
 offset (Span a b) = b
+
+duration :: Span -> Time
 duration s = offset s - onset s
+
+delay :: Time -> Span -> Span
 delay t (Span a b) = Span (t + a) (t + b)
+
+startAt :: Time -> Span -> Span
 startAt t s = delay (t - onset s) s
 
 data Clip =
@@ -64,8 +88,13 @@ data Clip =
     !Span      -- part of file
   deriving (Show)
 
+clipName :: Clip -> Text
 clipName (Clip n sf sp) = n
+
+clipSourceFile :: Clip -> Text
 clipSourceFile (Clip n sf sp) = sf
+
+clipSpan :: Clip -> Span
 clipSpan (Clip n sf sp) = sp
 
 data Gen =
@@ -75,8 +104,13 @@ data Gen =
     !Time      -- time generator was created
   deriving (Show)
 
+genName :: Gen -> Text
 genName (Gen n cl started) = n
+
+genClip :: Gen -> Clip
 genClip (Gen n cl started) = cl
+
+genStarted :: Gen -> Time
 genStarted (Gen n cl started) = started
 
 -- Span in which generator is alive
@@ -85,9 +119,6 @@ genSpan (Gen _ (Clip _ _ s) t) = startAt t s
 
 genIsAlive :: Time -> Gen -> Bool
 genIsAlive t s = t `inside` genSpan s
-
--- Processed samples
-type Time = Int
 
 -- All global state
 data Fluent = Fluent {
@@ -240,7 +271,9 @@ killAudio fluent str = do
     Nothing -> return ()
   return ()
 
-waitForOsc :: (OSC.Message -> IO ()) -> IO ()
+type Handler = OSC.Message -> IO ()
+
+waitForOsc :: Handler -> IO ()
 waitForOsc handler = do
   let port = 54321
   putStrLn $ "Listening for OSC messages on port " ++ show 54321
@@ -255,9 +288,10 @@ waitForOsc handler = do
 isQuitMessage :: OSC.Message -> Bool
 isQuitMessage m = "/fluent/quit" `isPrefixOf` OSC.messageAddress m
                
+composeHandlers :: [Handler] -> Handler
 composeHandlers = foldr composeHandlers2 (\x -> return ())
 
-composeHandlers2 :: (OSC.Message -> IO ()) -> (OSC.Message -> IO ()) -> OSC.Message -> IO ()
+composeHandlers2 :: (Handler) -> (Handler) -> Handler
 composeHandlers2 f g m = do
   f m
   g m
@@ -276,6 +310,7 @@ startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genAndClipId])
     -- TODO crashes on bad msg
     startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
 startHandler' fluent _ = putStrLn "Error: Bad message"
+
 stopHandler fluent m
   | "/fluent/stop" `isPrefixOf` OSC.messageAddress m = stopHandler' fluent m
   | otherwise = return ()
@@ -283,8 +318,7 @@ stopHandler' fluent  (OSC.Message _ [OSC.ASCII_String genId])
   = stopPlayingClip (bs2t genId) fluent  >> return ()
 stopHandler' fluent _ = putStrLn "Error: Bad message"
 
-bs2t = T.pack . BS.unpack
-
+runFluent :: IO ()
 runFluent = do
   putStrLn "Fluent says hello!"
   c <- atomically $ newTVar mempty
@@ -311,6 +345,9 @@ setupFileDataToClips :: [(String, String, (Double, Double))] -> [Clip]
 setupFileDataToClips = map toClip
   where
     toClip (n,f,(on,off)) = Clip (T.pack n) (T.pack f) (Span (floor $ on*kSAMPLE_RATE) (floor $ off*kSAMPLE_RATE))
+
+bs2t :: ByteString -> Text
+bs2t = T.pack . BS.unpack
 
 kSAMPLE_RATE = 44100  
 kVECSIZE = 128
