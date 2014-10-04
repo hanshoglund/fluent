@@ -296,12 +296,15 @@ composeHandlers2 f g m = do
   f m
   g m
 
+statusHandler :: Fluent -> Handler
 statusHandler fluent m
   | "/fluent/status" `isPrefixOf` OSC.messageAddress m = putStrLn "Fluent is alright"
   | otherwise = return ()
 startHandler fluent m
   | "/fluent/play" `isPrefixOf` OSC.messageAddress m = startHandler' fluent m
   | otherwise = return ()
+
+startHandler :: Fluent -> Handler
 startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genId, OSC.ASCII_String clipId])
   = startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
 startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genAndClipId])
@@ -311,6 +314,7 @@ startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genAndClipId])
     startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
 startHandler' fluent _ = putStrLn "Error: Bad message"
 
+stopHandler :: Fluent -> Handler
 stopHandler fluent m
   | "/fluent/stop" `isPrefixOf` OSC.messageAddress m = stopHandler' fluent m
   | otherwise = return ()
