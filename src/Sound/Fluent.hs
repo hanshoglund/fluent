@@ -1,44 +1,44 @@
 
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE OverloadedStrings   #-}
 
 module Sound.Fluent where
 
-import Data.ByteString.Char8 (ByteString(..))
-import qualified Data.ByteString.Char8 as BS
-import qualified Sound.OSC           as OSC
-import qualified Sound.OSC.Transport.FD
-import Sound.OSC (OSC, Datum)
-import qualified Sound.PortAudio                  as PA
-import qualified Sound.PortAudio.Base             as PAB
-import qualified System.Random                    as R
+import           Data.ByteString.Char8            (ByteString (..))
+import qualified Data.ByteString.Char8            as BS
 import qualified Data.Vector.Storable             as V
 import qualified Sound.File.Sndfile               as SF
 import qualified Sound.File.Sndfile.Buffer        as BSF
 import qualified Sound.File.Sndfile.Buffer.Vector as VSF
+import           Sound.OSC                        (Datum, OSC)
+import qualified Sound.OSC                        as OSC
+import qualified Sound.OSC.Transport.FD
+import qualified Sound.PortAudio                  as PA
+import qualified Sound.PortAudio.Base             as PAB
+import qualified System.Random                    as R
 
 -- import Control.Lens
 
 
-import Data.List (isPrefixOf)
-import           Data.Monoid
-import           Control.Monad
 import           Control.Concurrent
 import           Control.Concurrent.MVar
 import           Control.Concurrent.STM
+import           Control.Monad
 import           Control.Monad                    (foldM, foldM_, forM_)
+import           Data.List                        (isPrefixOf)
+import           Data.Map.Strict                  (Map)
+import qualified Data.Map.Strict                  as Map
+import           Data.Monoid
 import           Text.Printf
-import qualified Data.Map.Strict as Map
-import           Data.Map.Strict (Map)
 
+import           Data.Text                        (Text)
+import qualified Data.Text                        as T
 import           Foreign.C.Types
 import           Foreign.ForeignPtr
 import           Foreign.Marshal.Alloc
 import           Foreign.Ptr
 import           Foreign.Storable
-import           Data.Text (Text)
-import qualified Data.Text as T
 
 import           System.Environment               (getArgs)
 
@@ -59,7 +59,7 @@ timeToSeconds x = fromIntegral x / kSAMPLE_RATE
 secondsToTime :: Double -> Time
 secondsToTime x = floor (x * kSAMPLE_RATE)
 
--- | 
+-- |
 data Span = Span !Time !Time
   deriving (Eq, Ord, Show)
 
@@ -134,23 +134,23 @@ data Fluent = Fluent {
 
 removeFinishedGens :: Time -> Fluent -> IO ()
 removeFinishedGens t fluent =
-  atomically $ modifyTVar (_fluentGens fluent) (Map.filter (genIsAlive t))
+  atomically $ modifyTVar (_fluentGens fluent) (Map.filter (genIsAlive t))
 
 removeGenNamed :: Text -> Fluent -> IO ()
 removeGenNamed n fluent =
-  atomically $ modifyTVar (_fluentGens fluent) (Map.delete n)
+  atomically $ modifyTVar (_fluentGens fluent) (Map.delete n)
 
 haveClip :: Clip -> Fluent -> IO Bool
 haveClip clip fluent =
-  atomically $ fmap (Map.member $ clipName clip) $ readTVar (_fluentClips fluent)
+  atomically $ fmap (Map.member $ clipName clip) $ readTVar (_fluentClips fluent)
 
 
 -- Set up buffer arrays
 preloadBuffers :: [Clip] -> Fluent -> IO ()
 preloadBuffers clips fluent =
-  forM_ clips $ \clip -> do
-    let inFile = T.unpack $ clipSourceFile clip
-    putStrLn $ "Loading clip " ++ T.unpack (clipName clip) ++ "\t\t " ++ inFile ++ "..."
+  forM_ clips $ \clip -> do
+    let inFile = T.unpack $ clipSourceFile clip
+    putStrLn $ "Loading clip " ++ T.unpack (clipName clip) ++ "\t\t " ++ inFile ++ "..."
     (info, Just (x :: VSF.Buffer Float)) <- SF.readFile inFile
     -- putStrLn $ "sample rate: " ++ (show $ SF.samplerate info)
     -- putStrLn $ "channels: "    ++ (show $ SF.channels info)
@@ -170,19 +170,19 @@ startPlayingClip clip genId fluent = do
   if not ok then
     putStrLn $ "Error: Unknown clip: " ++ T.unpack (clipName clip)
     else do
-      time <- atomically $ readTVar (_fluentTime fluent)
+      time <- atomically $ readTVar (_fluentTime fluent)
       let gen = Gen genId clip time
       atomically $ modifyTVar (_fluentGens fluent) (Map.insert genId gen)
       return ()
   return ()
-  
+
 startPlayingClipNamed
   :: Text -- ^ clip to play
   -> Text -- ^ id (for stop)
   -> Fluent
   -> IO ()
 startPlayingClipNamed clipId genId fluent = do
-  clips <- atomically $ readTVar (_fluentClips fluent)
+  clips <- atomically $ readTVar (_fluentClips fluent)
   case Map.lookup clipId clips of
     Nothing -> putStrLn $ "Error: Unknown clip: " ++ T.unpack clipId
     Just c  -> startPlayingClip c genId fluent -- TODO unnecessary double check
@@ -223,7 +223,7 @@ initAudio fluent = do
     dspCallback fluent __timing__ __flags__ frames __inpPtr__ outPtr = do
       -- TODO assume 2 channels
       let channels = 2
-      t       <- atomically $ readTVar (_fluentTime fluent)
+      t       <- atomically $ readTVar (_fluentTime fluent)
 
       buffers <- atomically $ readTVar (_fluentBuffers fluent)
       gens    <- atomically $ readTVar (_fluentGens fluent)
@@ -235,7 +235,7 @@ initAudio fluent = do
           pokeElemOff outPtr (fromIntegral $ f*channels+c) 0
 
       -- Run all generators one by one
-      forM_ (fmap snd $ Map.toList gens) $ \gen -> do
+      forM_ (fmap snd $ Map.toList gens) $ \gen -> do
         let clip = genClip gen
         let bufferName = clipName clip
         let b = Map.lookup bufferName buffers
@@ -250,7 +250,7 @@ initAudio fluent = do
                 -- If we started later, read an earlier position in the buffer
                 let preciseLocalTime = preciseGlobalTime - genStarted gen
                 let v = (V.!) b (preciseLocalTime + onset (clipSpan clip))
-                
+
                 -- Add v to index (so simultanous generators are summed)
                 oldV <- peekElemOff outPtr (fromIntegral $ f*channels+c)
                 pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v + oldV)
@@ -278,7 +278,7 @@ waitForOsc handler = do
   let port = 54321
   putStrLn $ "Listening for OSC messages on port " ++ show 54321
   let t = OSC.udpServer "127.0.0.1" port
-  Sound.OSC.Transport.FD.withTransport t $ \t -> void $ OSC.untilPredicate not {-should be not-} $ do
+  Sound.OSC.Transport.FD.withTransport t $ \t -> void $ OSC.untilPredicate not {-should be not-} $ do
     msgs <- Sound.OSC.Transport.FD.recvMessages t
     mapM_ handler msgs
     return $ any isQuitMessage msgs
@@ -287,7 +287,7 @@ waitForOsc handler = do
 
 isQuitMessage :: OSC.Message -> Bool
 isQuitMessage m = "/fluent/quit" `isPrefixOf` OSC.messageAddress m
-               
+
 composeHandlers :: [Handler] -> Handler
 composeHandlers = foldr composeHandlers2 (\x -> return ())
 
@@ -298,14 +298,14 @@ composeHandlers2 f g m = do
 
 statusHandler fluent m
   | "/fluent/status" `isPrefixOf` OSC.messageAddress m = putStrLn "Fluent is alright"
-  | otherwise = return ()
+  | otherwise = return ()
 startHandler fluent m
   | "/fluent/play" `isPrefixOf` OSC.messageAddress m = startHandler' fluent m
-  | otherwise = return ()
+  | otherwise = return ()
 startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genId, OSC.ASCII_String clipId])
   = startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
 startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genAndClipId])
-  = 
+  =
     let (genId : clipId : _) = BS.words genAndClipId in
     -- TODO crashes on bad msg
     startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
@@ -313,7 +313,7 @@ startHandler' fluent _ = putStrLn "Error: Bad message"
 
 stopHandler fluent m
   | "/fluent/stop" `isPrefixOf` OSC.messageAddress m = stopHandler' fluent m
-  | otherwise = return ()
+  | otherwise = return ()
 stopHandler' fluent  (OSC.Message _ [OSC.ASCII_String genId])
   = stopPlayingClip (bs2t genId) fluent  >> return ()
 stopHandler' fluent _ = putStrLn "Error: Bad message"
@@ -324,11 +324,11 @@ runFluent = do
   c <- atomically $ newTVar mempty
   b <- atomically $ newTVar mempty
   g <- atomically $ newTVar mempty
-  t <- atomically $ newTVar 0
+  t <- atomically $ newTVar 0
   let fluent = Fluent c b g t
 
   setup <- readFile "setupFluent.hs"
-  
+
   preloadBuffers (setupFileTextToClips setup) fluent
 
   str2 <- initAudio fluent
@@ -344,15 +344,15 @@ setupFileTextToClips = setupFileDataToClips . read
 setupFileDataToClips :: [(String, String, (Double, Double))] -> [Clip]
 setupFileDataToClips = map toClip
   where
-    toClip (n,f,(on,off)) = Clip (T.pack n) (T.pack f) (Span (floor $ on*kSAMPLE_RATE) (floor $ off*kSAMPLE_RATE))
+    toClip (n,f,(on,off)) = Clip (T.pack n) (T.pack f) (Span (floor $ on*kSAMPLE_RATE) (floor $ off*kSAMPLE_RATE))
 
 bs2t :: ByteString -> Text
 bs2t = T.pack . BS.unpack
 
-kSAMPLE_RATE = 44100  
+kSAMPLE_RATE = 44100
 kVECSIZE = 128
 -- TODO infer duration from sound files
-  
+
 {-
 Setup file:
   [
