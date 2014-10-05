@@ -207,13 +207,13 @@ initAudio fluent = do
     0 -- inputs
     2 -- outputs
     kSAMPLE_RATE
-    (Just (kVECSIZE)) -- TODO 'Nothing' is more efficient
+    (Just kVECSIZE) -- TODO 'Nothing' is possibly more efficient
     (Just $ dspCallback fluent)
     (Just $ putStrLn "Audio thread finished alright") -- when done
   str2 <- case str of
     Left _ -> fail "Could not open stream"
     Right s -> return s
-  threadDelay (1000000*1) -- TODO
+  threadDelay (1000000*1)
   PA.startStream str2
   return str2
 
@@ -262,9 +262,9 @@ initAudio fluent = do
 killAudio :: Fluent -> PA.Stream CFloat CFloat -> IO ()
 killAudio fluent str = do
   PA.stopStream str
-  threadDelay (1000000*1) -- TODO
+  threadDelay (1000000*1)
   PA.closeStream str
-  threadDelay (1000000*1) -- TODO
+  threadDelay (1000000*1)
   paRes <- PA.terminate
   case paRes of
     Just e  -> fail $ show e
