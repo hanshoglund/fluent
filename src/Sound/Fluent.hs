@@ -151,6 +151,17 @@ data Fluent = Fluent {
   _fluentTime    :: TVar Time
   }
 
+newFluent :: IO Fluent
+newFluent = do
+  c <- atomically $ newTVar mempty
+  b <- atomically $ newTVar mempty
+  g <- atomically $ newTVar mempty
+  t <- atomically $ newTVar 0
+  return $ Fluent c b g t
+
+removeAllGens :: Fluent -> IO ()
+removeAllGens fluent =
+  atomically $ writeTVar (_fluentGens fluent) mempty
 
 removeFinishedGens :: Time -> Fluent -> IO ()
 removeFinishedGens t fluent =
@@ -317,48 +328,40 @@ isQuitMessage m = "/fluent/quit" `isPrefixOf` OSC.messageAddress m
 composeHandlers :: [Handler] -> Handler
 composeHandlers = foldr composeHandlers2 (\x -> return ())
 
-composeHandlers2 :: (Handler) -> (Handler) -> Handler
+composeHandlers2 :: Handler -> Handler -> Handler
 composeHandlers2 f g m = do
   f m
   g m
 
 statusHandler :: Fluent -> Handler
-statusHandler fluent m
-  | "/fluent/status" `isPrefixOf` OSC.messageAddress m = putStrLn "Fluent is alright"
-  | otherwise = return ()
-startHandler fluent m
-  | "/fluent/play" `isPrefixOf` OSC.messageAddress m = startHandler' fluent m
-  | otherwise = return ()
+statusHandler fluent m = when ("/fluent/status" `isPrefixOf` OSC.messageAddress m) $
+  -- TODO print more info
+  putStrLn "Fluent is alright"
 
 startHandler :: Fluent -> Handler
-startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genId, OSC.ASCII_String clipId])
-  = startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
-startHandler' fluent  (OSC.Message _ [OSC.ASCII_String genAndClipId])
-  =
-    let (genId : clipId : _) = BS.words genAndClipId in
-    -- TODO crashes on bad msg
-    startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
-startHandler' fluent _ = putStrLn "Error: Bad message"
+startHandler fluent m  = when ("/fluent/play" `isPrefixOf` OSC.messageAddress m) $ go fluent m
+  where
+    go fluent  (OSC.Message _ [OSC.ASCII_String genId, OSC.ASCII_String clipId])
+      = startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
+    go fluent  (OSC.Message _ [OSC.ASCII_String genAndClipId])
+      = let (genId : clipId : _) = BS.words genAndClipId in
+        -- TODO crashes on bad msg
+        startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
+    go fluent _ = putStrLn "Error: Bad message"
 
 stopHandler :: Fluent -> Handler
-stopHandler fluent m
-  | "/fluent/stop" `isPrefixOf` OSC.messageAddress m = stopHandler' fluent m
-  | otherwise = return ()
-stopHandler' fluent  (OSC.Message _ [OSC.ASCII_String genId])
-  = stopPlayingClip (bs2t genId) fluent  >> return ()
-stopHandler' fluent _ = putStrLn "Error: Bad message"
+stopHandler fluent m = when ("/fluent/stop" `isPrefixOf` OSC.messageAddress m) $ go fluent m
+  where
+    go fluent  (OSC.Message _ [OSC.ASCII_String genId])
+      = stopPlayingClip (bs2t genId) fluent  >> return ()
+    go fluent _ = putStrLn "Error: Bad message"
 
 runFluent :: IO ()
 runFluent = do
   putStrLn "Fluent says hello!"
-  c <- atomically $ newTVar mempty
-  b <- atomically $ newTVar mempty
-  g <- atomically $ newTVar mempty
-  t <- atomically $ newTVar 0
-  let fluent = Fluent c b g t
 
-  setup <- readFile "setupFluent.hs"
-
+  fluent <- newFluent
+  setup  <- readFile "setupFluent.hs"
   preloadBuffers (setupFileTextToClips setup) fluent
 
   str2 <- initAudio fluent
