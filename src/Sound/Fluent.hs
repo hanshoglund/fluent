@@ -30,8 +30,6 @@ import           Data.List                        (isPrefixOf)
 import           Data.Map.Strict                  (Map)
 import qualified Data.Map.Strict                  as Map
 import           Data.Monoid
-import           Text.Printf
-
 import           Data.Text                        (Text)
 import qualified Data.Text                        as T
 import           Foreign.C.Types
@@ -39,6 +37,7 @@ import           Foreign.ForeignPtr
 import           Foreign.Marshal.Alloc
 import           Foreign.Ptr
 import           Foreign.Storable
+import           Text.Printf
 
 import           System.Environment               (getArgs)
 
@@ -48,10 +47,10 @@ import           System.Environment               (getArgs)
   The API is imperative/OO: i.e. you need to create a Fluent instance
   inside IO and call methods to preload and start listening to OSC
   in a certain order: see runFluent for an example.
-  
+
   You can have serveral Fluent instances, but initAudio/killAudio uses
   Portaudio global initialize and claims the entire audio hardware.
-  
+
   Currently supports:
     - Playing mono 44100 wav or aiff files
     - Stereo (2 channel) output to the system default device
@@ -61,7 +60,7 @@ import           System.Environment               (getArgs)
   Possibilities:
     - Allow generators to use several source files
     - Allow generators to compute a DSP graph (from source files or internal state, for i.e. filters)
-    - Allow generators to write to buffers instead of just reading 
+    - Allow generators to write to buffers instead of just reading
 
   Implementing the above stuff would bring us closer to something like scsynth/CSound. I don't really
   want to go into the world of full DSP without thinking about a more functional way of organizing it.
@@ -294,7 +293,7 @@ initAudio fluent = do
       y <- peekElemOff p i
       pokeElemOff p i (x + y)
     {-# INLINE addToElemOff #-}
-        
+
 
 killAudio :: Fluent -> PA.Stream CFloat CFloat -> IO ()
 killAudio fluent str = do
