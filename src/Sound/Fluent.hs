@@ -42,12 +42,33 @@ import           Foreign.Storable
 
 import           System.Environment               (getArgs)
 
--- Only use mono 44100 files for a start!
 {-
-  Before audio starts, we have a list of clips
-  During DSP we might get an instruction to stat playing a clip
-    This becomes a generator which can be stopped (and possibly changed)
+  A real-time DSP engine and sampler in Haskell based on portaudio, hsndfile and hosc.
 
+  The API is imperative/OO: i.e. you need to create a Fluent instance
+  inside IO and call methods to preload and start listening to OSC
+  in a certain order: see runFluent for an example.
+  
+  You can have serveral Fluent instances, but initAudio/killAudio uses
+  Portaudio global initialize and claims the entire audio hardware.
+  
+  Currently supports:
+    - Playing mono 44100 wav or aiff files
+    - Stereo (2 channel) output to the system default device
+    - Preloads all clips into RAM plays or stops sound in response to OSC
+    - All generators (instance of a playing sound) write to global output (mixing their result)
+
+  Possibilities:
+    - Allow generators to use several source files
+    - Allow generators to compute a DSP graph (from source files or internal state, for i.e. filters)
+    - Allow generators to write to buffers instead of just reading 
+
+  Implementing the above stuff would bring us closer to something like scsynth/CSound. I don't really
+  want to go into the world of full DSP without thinking about a more functional way of organizing it.
+  Something like: A fluent instance computes the sound in a *world*, in which *sounds* take place.
+  Sounds may be *transformed*, i.e. delayed, stretched, positioned in space, or inside a filter or
+  resonant environment. All this to get rid of the error-prone manual global bus/buffer/execution order
+  stuff a la scsynth et al.
 -}
 
 -- | Measure time in number of processed sample for speed and precision.
@@ -84,7 +105,7 @@ startAt t s = delay (t - onset s) s
 data Clip =
   Clip
     !Text      -- unique clip id
-    !Text      -- source file
+    !Text      -- source file path
     !Span      -- part of file
   deriving (Show)
 
@@ -122,13 +143,12 @@ genIsAlive t s = t `inside` genSpan s
 
 -- All global state
 data Fluent = Fluent {
-  -- These don't need to be vars...
   -- preloadBuffers only access clips and buffers
   -- DSP thread access buffers, gens and time
-  _fluentClips   :: (TVar (Map Text Clip)),
-  _fluentBuffers :: (TVar (Map Text (V.Vector Float))),
-  _fluentGens    :: (TVar (Map Text Gen)),
-  _fluentTime    :: (TVar Time)
+  _fluentClips   :: TVar (Map Text Clip),
+  _fluentBuffers :: TVar (Map Text (V.Vector Float)),
+  _fluentGens    :: TVar (Map Text Gen),
+  _fluentTime    :: TVar Time
   }
 
 
@@ -207,7 +227,7 @@ initAudio fluent = do
     0 -- inputs
     2 -- outputs
     kSAMPLE_RATE
-    (Just kVECSIZE) -- TODO 'Nothing' is possibly more efficient
+    (Just kVECTOR_SIZE) -- TODO 'Nothing' is possibly more efficient
     (Just $ dspCallback fluent)
     (Just $ putStrLn "Audio thread finished alright") -- when done
   str2 <- case str of
@@ -354,7 +374,7 @@ bs2t :: ByteString -> Text
 bs2t = T.pack . BS.unpack
 
 kSAMPLE_RATE = 44100
-kVECSIZE = 128
+kVECTOR_SIZE = 128
 -- TODO infer duration from sound files
 
 {-
