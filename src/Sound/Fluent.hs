@@ -224,8 +224,9 @@ initAudio fluent = do
     Nothing -> return ()
 
   str <- PA.openDefaultStream
-    0 -- inputs
-    2 -- outputs
+    -- TODO assumes no input, stereo output
+    (fromIntegral kINPUT_CHANNELS) -- inputs
+    (fromIntegral kOUTPUT_CHANNELS) -- outputs
     kSAMPLE_RATE
     (Just kVECTOR_SIZE) -- TODO 'Nothing' is possibly more efficient
     (Just $ dspCallback fluent)
@@ -241,10 +242,9 @@ initAudio fluent = do
 
     dspCallback :: Fluent -> PA.StreamCallback CFloat CFloat
     dspCallback fluent __timing__ __flags__ frames __inpPtr__ outPtr = do
-      -- TODO assume 2 channels
-      let channels = 2
-      t       <- atomically $ readTVar (_fluentTime fluent)
-
+      -- TODO assumes 2 channels
+      let channels = kOUTPUT_CHANNELS
+      time    <- atomically $ readTVar (_fluentTime fluent)
       buffers <- atomically $ readTVar (_fluentBuffers fluent)
       gens    <- atomically $ readTVar (_fluentGens fluent)
       -- print gens
@@ -256,28 +256,34 @@ initAudio fluent = do
 
       -- Run all generators one by one
       forM_ (fmap snd $ Map.toList gens) $ \gen -> do
-        let clip = genClip gen
-        let bufferName = clipName clip
-        let b = Map.lookup bufferName buffers
-        case b of
+        let clip         = genClip gen
+        let bufferName   = clipName clip
+        let genStartTime = genStarted gen
+        let clipOnset    = onset (clipSpan clip)
+        case Map.lookup bufferName buffers of
           Nothing -> return () -- TODO missing buffer, report somewhere
-          Just b -> do
-            -- TODO optimize (move things up...)
-            forM_ [0..channels-1] $ \c ->
-              forM_ [0..frames-1] $ \f -> do
+          Just buffer -> do
+            forM_ [0..channels-1] $ \channel ->
+              forM_ [0..frames-1] $ \frame -> do
                 -- Index to read: current time offset + current frame + offset in buffer
-                let preciseGlobalTime = t + fromIntegral f
+                let preciseGlobalTime = time + fromIntegral frame
                 -- If we started later, read an earlier position in the buffer
-                let preciseLocalTime = preciseGlobalTime - genStarted gen
-                let v = (V.!) b (preciseLocalTime + onset (clipSpan clip))
+                let preciseLocalTime = preciseGlobalTime - genStartTime
+                let v = (V.!) buffer (preciseLocalTime + clipOnset)
 
                 -- Add v to index (so simultanous generators are summed)
-                oldV <- peekElemOff outPtr (fromIntegral $ f*channels+c)
-                pokeElemOff outPtr (fromIntegral $ f*channels+c) (realToFrac v + oldV)
+                addToElemOff outPtr (fromIntegral $ frame * channels + channel) (realToFrac v)
 
       atomically $ modifyTVar (_fluentTime fluent) (\t -> t + fromIntegral frames)
-      removeFinishedGens t fluent
+      removeFinishedGens time fluent
       return PA.Continue
+
+    addToElemOff :: (Num a, Storable a) => Ptr a -> Int -> a -> IO ()
+    addToElemOff p i x = do
+      y <- peekElemOff p i
+      pokeElemOff p i (x + y)
+    {-# INLINE addToElemOff #-}
+        
 
 killAudio :: Fluent -> PA.Stream CFloat CFloat -> IO ()
 killAudio fluent str = do
@@ -373,8 +379,10 @@ setupFileDataToClips = map toClip
 bs2t :: ByteString -> Text
 bs2t = T.pack . BS.unpack
 
-kSAMPLE_RATE = 44100
-kVECTOR_SIZE = 128
+kSAMPLE_RATE    = 44100
+kVECTOR_SIZE     = 128
+kINPUT_CHANNELS  = 0
+kOUTPUT_CHANNELS = (2 :: CULong)
 -- TODO infer duration from sound files
 
 {-
