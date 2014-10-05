@@ -53,16 +53,18 @@ import           System.Environment               (getArgs)
     - All generators (instance of a playing sound) write to global output (mixing their result)
 
   Possibilities:
+    - Typical sampler stuff, i.e. looping (over specific span) and speed/pitch
     - Allow generators to use several source files
     - Allow generators to compute a DSP graph (from source files or internal state, for i.e. filters)
     - Allow generators to write to buffers instead of just reading
 
   Implementing the above stuff would bring us closer to something like scsynth/CSound. I don't really
   want to go into the world of full DSP without thinking about a more functional way of organizing it.
+
   Something like: A fluent instance computes the sound in a *world*, in which *sounds* take place.
   Sounds may be *transformed*, i.e. delayed, stretched, positioned in space, or inside a filter or
   resonant environment. All this to get rid of the error-prone manual global bus/buffer/execution order
-  stuff a la scsynth et al.
+  stuff of scsynth et al.
 -}
 
 -- | Measure time in number of processed sample for speed and precision.
@@ -214,11 +216,11 @@ startPlayingClipNamed clipId genId fluent = do
   return ()
 
 -- Remove generator
-stopPlayingClip
+stopPlayingClipNamed
   :: Text   -- ^ id (for stop)
   -> Fluent
   -> IO ()
-stopPlayingClip = removeGenNamed
+stopPlayingClipNamed = removeGenNamed
 
 
 initAudio :: Fluent -> IO (PA.Stream CFloat CFloat)
@@ -347,7 +349,7 @@ stopHandler :: Fluent -> Handler
 stopHandler fluent m = when ("/fluent/stop" `isPrefixOf` OSC.messageAddress m) $ go fluent m
   where
     go fluent  (OSC.Message _ [OSC.ASCII_String genId])
-      = stopPlayingClip (bs2t genId) fluent  >> return ()
+      = stopPlayingClipNamed (bs2t genId) fluent  >> return ()
     go fluent _ = putStrLn "Error: Bad message"
 
 runFluent :: IO ()
