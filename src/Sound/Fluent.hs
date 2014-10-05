@@ -9,23 +9,18 @@ import           Data.ByteString.Char8            (ByteString (..))
 import qualified Data.ByteString.Char8            as BS
 import qualified Data.Vector.Storable             as V
 import qualified Sound.File.Sndfile               as SF
-import qualified Sound.File.Sndfile.Buffer        as BSF
 import qualified Sound.File.Sndfile.Buffer.Vector as VSF
-import           Sound.OSC                        (Datum, OSC)
 import qualified Sound.OSC                        as OSC
 import qualified Sound.OSC.Transport.FD
 import qualified Sound.PortAudio                  as PA
-import qualified Sound.PortAudio.Base             as PAB
 import qualified System.Random                    as R
 
 -- import Control.Lens
 
 
 import           Control.Concurrent
-import           Control.Concurrent.MVar
 import           Control.Concurrent.STM
 import           Control.Monad
-import           Control.Monad                    (foldM, foldM_, forM_)
 import           Data.List                        (isPrefixOf)
 import           Data.Map.Strict                  (Map)
 import qualified Data.Map.Strict                  as Map
