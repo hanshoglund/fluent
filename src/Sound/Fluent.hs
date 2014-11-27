@@ -337,13 +337,17 @@ statusHandler fluent m = when ("/fluent/status" `isPrefixOf` OSC.messageAddress 
 startHandler :: Fluent -> Handler
 startHandler fluent m  = when ("/fluent/play" `isPrefixOf` OSC.messageAddress m) $ go fluent m
   where
+    go fluent  (OSC.Message _ [OSC.Int32 genId, OSC.Int32 clipId])
+      = startPlayingClipNamed (T.pack $ show clipId) (T.pack $ show genId) fluent  >> return ()
+
     go fluent  (OSC.Message _ [OSC.ASCII_String genId, OSC.ASCII_String clipId])
       = startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
+
     go fluent  (OSC.Message _ [OSC.ASCII_String genAndClipId])
       = let (genId : clipId : _) = BS.words genAndClipId in
         -- TODO crashes on bad msg
         startPlayingClipNamed (bs2t clipId) (bs2t genId) fluent  >> return ()
-    go fluent _ = putStrLn "Error: Bad message"
+    go fluent _ = putStrLn $ "Error: Bad message" ++ show m
 
 stopHandler :: Fluent -> Handler
 stopHandler fluent m = when ("/fluent/stop" `isPrefixOf` OSC.messageAddress m) $ go fluent m
