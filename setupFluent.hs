@@ -1,5 +1,5 @@
 [
-  ("chord1_begin", "sounds/mono_chord4_begin_fade.wav", (0,11))
+  ("chord1_begin", "sounds/mono_chord1_begin_fade.wav", (0,11))
 , ("chord2_begin", "sounds/mono_chord2_begin_fade.wav", (0,11))
 , ("chord3_begin", "sounds/mono_chord3_begin_fade.wav", (0,11))
 , ("chord4_begin", "sounds/mono_chord4_begin_fade.wav", (0,11))
